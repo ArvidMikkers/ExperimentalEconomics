@@ -1,0 +1,992 @@
+---
+title: "Data Analysis"
+subtitle: "Attachment"
+author: "Group 3"
+format:
+  html:
+    code-fold: true
+    self-contained: true
+editor: visual
+---
+
+# Data preparation
+
+```{r setup, warning = FALSE, message = FALSE}
+
+## Packages and settings
+knitr::opts_chunk$set(eval = TRUE, warning = FALSE, message = FALSE)
+
+scipen = 999
+
+library(tidyverse)
+library(patchwork) # To display 2 charts together
+library(hrbrthemes)
+library(splines)
+library(dplyr)
+
+```
+
+```{r dataprep}
+
+df <- read.csv2("SurveyData.csv", sep = ",") 
+
+descStat <- df %>%
+   summarise(across(everything(), ~ sum(., na.rm = TRUE)))
+V1_count <- descStat$Version
+V2_count <- 48 - descStat$Version
+
+V1 <- df %>%
+  filter(Version == 0)
+
+V2 <- df %>%
+  filter(Version == 1)
+
+percentageV1 <- V1 %>%
+   summarise(across(everything(), ~ sum(., na.rm = TRUE)))
+
+percentageV2 <- V2 %>%
+   summarise(across(everything(), ~ sum(., na.rm = TRUE)))
+
+percentageV1 <- percentageV1 %>%
+  mutate(percentageV1 /V1_count)
+percentageV2 <- percentageV2 %>%
+  mutate(percentageV2 /V2_count)
+
+Q1V1 <- percentageV1 %>%
+  select(3:11)
+Q2V1 <- percentageV1 %>%
+  select(12:20)
+Q3V1 <- percentageV1 %>%
+  select(21:29)
+Q4V1 <- percentageV1 %>%
+  select(30:38)
+
+Q1V2 <- percentageV2 %>%
+  select(3:11)
+Q2V2 <- percentageV2 %>%
+  select(12:20)
+Q3V2 <- percentageV2 %>%
+  select(21:29)
+Q4V2 <- percentageV2 %>%
+  select(30:38)
+
+Q1V1 <- Q1V1 %>%
+  t()%>%
+  as.data.frame()
+Q1V1_pdf <- Q1V1 %>% 
+  mutate(DiffV1 = Q1V1 - lag(Q1V1))
+Q1V1_pdf <- Q1V1_pdf %>%
+  t()%>%
+  as.data.frame()
+Q1V1_pdf <- Q1V1_pdf %>% replace(is.na(.), Q1V1_pdf[1,1])
+
+Q1V2 <- Q1V2 %>%
+  t()%>%
+  as.data.frame()
+Q1V2_pdf <- Q1V2 %>% 
+  mutate(DiffV2 = Q1V2 - lag(Q1V2))
+Q1V2_pdf <- Q1V2_pdf %>%
+  t()%>%
+  as.data.frame()
+Q1V2_pdf <- Q1V2_pdf %>% replace(is.na(.), Q1V2_pdf[1,1])
+
+
+probabilities <- c(11/20, 12/20, 13/20, 14/20, 15/20, 16/20, 17/20, 18/20, 19/20)
+Q1_total <- rbind(Q1V2_pdf, Q1V1_pdf, probabilities)
+rownames(Q1_total)[5] <- "prob"
+
+
+Q1_total <- Q1_total %>%
+  t()%>%
+  as.data.frame()
+
+
+```
+
+# Question 1
+
+Blue is framed in terms of losses Red is frames in terms of gains
+
+## Swichover density plot
+
+```{r}
+ggplot() + 
+  geom_line(data = Q1_total, aes(x = prob, y = DiffV1), color = "blue") +
+  geom_line(data = Q1_total, aes(x = prob, y = DiffV2), color = "red") +
+  geom_point(data = Q1_total, aes(x = prob, y = DiffV1), color = "blue") +
+  geom_point(data = Q1_total, aes(x = prob, y = DiffV2), color = "red") +
+  labs(x = 'Swich over point', 'Percentge of swichers') +
+  theme_bw()
+  
+
+```
+
+\newpage
+
+## Cumulative switched over participants
+
+```{r}
+ggplot() + 
+  geom_line(data = Q1_total, aes(x = prob, y = V11), color = "blue") +
+  geom_line(data = Q1_total, aes(x = prob, y = V1), color = "red") +
+  geom_point(data = Q1_total, aes(x = prob, y = V11), color = "blue") +
+  geom_point(data = Q1_total, aes(x = prob, y = V1), color = "red") +
+  labs(x = 'Swich over point', 
+       y = 'Cumalitive swiched people') +
+  ylim(0, 1) +
+  theme_bw() 
+  
+ 
+```
+
+```{r}
+
+Q1_totalA <- Q1_total %>%
+  select(SW = prob, `Version 2` = V1, `Version 1` = V11) %>%
+  pivot_longer(cols = 2:3, names_to = "CWP", values_to = "Switched")
+ 
+ggplot(data = Q1_totalA, aes(x = SW, y = Switched, color = CWP, fill = CWP)) +
+  geom_point() +
+  stat_smooth(method = lm, formula = y ~ splines::bs(x, df = 3), alpha = 0.1) +
+  scale_color_manual(values = c("Version 2" = "red", "Version 1" = "blue")) +
+  scale_fill_manual(values = c("Version 2" = "red", "Version 1" = "blue")) +
+  theme_bw() +
+  labs(fill = "Version", color = "Version", y = "cumulative people switched", x = "percentage chance of losing 350") +
+  scale_x_continuous(breaks = seq(0.55, 0.95, 0.05))
+
+  
+```
+```{r}
+data <- data.frame(
+  V1 = c(0.08333333, 0.08333333, 0.08333333, 0.08333333, 0.29166667, 0.37500000, 0.70833333, 0.75000000, 0.79166667),
+  DiffV1 = c(0.08333333, 0.00000000, 0.00000000, 0.00000000, 0.20833333, 0.08333333, 0.33333333, 0.04166667, 0.04166667),
+  V2 = c(0.08333333, 0.12500000, 0.16666667, 0.41666667, 0.66666667, 0.83333333, 0.87500000, 0.91666667, 0.91666667),
+  DiffV2 = c(0.08333333, 0.04166667, 0.04166667, 0.25000000, 0.25000000, 0.16666667, 0.04166667, 0.04166667, 0.00000000),
+  prob = c(0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95)
+)
+
+# Perform the Mann-Whitney U test
+result <- wilcox.test(data$V1, data$V2)
+
+# Print the test statistic and p-value
+print( (result$statistic))
+print( result$p.value,)
+```
+
+\newpage
+
+# Question 2
+
+Deductible is 385 or 0\
+Blue gets the insurance premium as a monthly expense\
+Red gets the insurance premium as a yearly expense\
+To the right of the Black line is e where participants pay more than the deductible to not have a deductible\
+
+## Swichover density plot
+
+```{r}
+Q2V1 <- 1- Q2V1
+Q2V2 <- 1 - Q2V2
+
+
+Q2V1 <- Q2V1 %>%
+  t()%>%
+  as.data.frame()
+Q2V1_pdf <- Q2V1 %>% 
+  mutate(DiffV1 = Q2V1 - lag(Q2V1))
+Q2V1_pdf <- Q2V1_pdf %>%
+  t()%>%
+  as.data.frame()
+Q2V1_pdf <- Q2V1_pdf %>% replace(is.na(.), Q2V1_pdf[1,1])
+
+
+
+
+Q2V2 <- Q2V2 %>%
+  t()%>%
+  as.data.frame()
+Q2V2_pdf <- Q2V2 %>% 
+  mutate(DiffV2 = Q2V2 - lag(Q2V2))
+Q2V2_pdf <- Q2V2_pdf %>%
+  t()%>%
+  as.data.frame()
+Q2V2_pdf <- Q2V2_pdf %>% replace(is.na(.), Q2V2_pdf[1,1])
+
+
+probabilities <- c(1,2,3,4,5,6,7,8,9)
+Q2_total <- rbind(Q2V2_pdf, Q2V1_pdf, probabilities)
+rownames(Q2_total)[5] <- "prob"
+
+
+Q2_total <- Q2_total %>%
+  t()%>%
+  as.data.frame()
+
+
+```
+
+```{r}
+ggplot() + 
+  geom_line(data = Q2_total, aes(x = prob, y = DiffV1), color = "blue") +
+  geom_line(data = Q2_total, aes(x = prob, y = DiffV2), color = "red") +
+  geom_point(data = Q2_total, aes(x = prob, y = DiffV1), color = "blue") +
+  geom_point(data = Q2_total, aes(x = prob, y = DiffV2), color = "red") +
+  geom_vline(xintercept = 6.41)+
+  xlab('Swich over point') +
+  ylab('Percentage of swichers')
+
+# ggsave("naamplot.png")
+
+```
+
+## Cumulative swichover plot
+
+```{r}
+p = ggplot() + 
+  geom_line(data = Q2_total, aes(x = prob, y = V11), color = "blue") +
+  geom_line(data = Q2_total, aes(x = prob, y = V1), color = "red") +
+  geom_point(data = Q2_total, aes(x = prob, y = V11), color = "blue") +
+  geom_point(data = Q2_total, aes(x = prob, y = V1), color = "red") +
+  xlab('Swich over point') +
+  geom_vline(xintercept = 6.41)+
+  ylab('Cumalitive swiched people') +
+  ylim(0, 1)
+
+p
+```
+
+```{r}
+RealdeductibleQ2<- c((385-0+12*(110-115)),
+                   (385-0+12*(110-120)),
+                   (385-0+12*(110-125)),
+                   (385-0+12*(110-130)),
+                   (385-0+12*(110-135)),
+                   (385-0+12*(110-140)),
+                   (385-0+12*(110-145)),
+                   (385-0+12*(110-150)),
+                   (385-0+12*(110-155)))
+
+RealdeductibleQ2<- rbind(RealdeductibleQ2, Q2V1_pdf, probabilities)%>%
+  t()%>%
+  as.data.frame()
+colnames(RealdeductibleQ2)[4] <- "prob" 
+colnames(RealdeductibleQ2)[1] <- "diff" 
+
+
+```
+
+```{r}
+
+min_x <- 1
+max_x <- 9
+
+RealdeductibleQ2_up <- RealdeductibleQ2 %>%
+  select(-c(diff, DiffV1))%>%
+  add_row(prob = c(max_x, min_x),
+                  V1 = c(Inf, Inf))
+
+min_x1 <- 6.41
+max_x1 <- 9
+
+RealdeductibleQ2_up2 <- RealdeductibleQ2 %>%
+  select(-c(diff, DiffV1))%>%
+  filter(!row_number() %in% c(1, 2,3,4,5,6))%>%
+  tibble::add_row(prob = c(max_x1, min_x1, 6.41),
+                  V1 = c(Inf, Inf, RealdeductibleQ2[6,2]+(RealdeductibleQ2[7,2] - RealdeductibleQ2[6,2])*0.41))
+
+RealdeductibleQ2[6,2]+(RealdeductibleQ2[7,2] - RealdeductibleQ2[6,2])*0.41
+
+
+
+
+
+
+# Value used to transform the data
+coeff <- 480
+
+# A few constants
+temperatureColor <- "#69b3a2"
+priceColor <- rgb(0.2, 0.6, 0.9, 1)
+
+ggplot(RealdeductibleQ2, aes(x=prob), xlim= c(0,9)) +
+  
+  geom_line( aes(y=V1), size=1, color=temperatureColor) +
+  geom_point(aes(y=V1), size=2, color=temperatureColor)+
+  
+  geom_line( aes(y=(diff+155) / coeff ), size=1, color=priceColor) +
+   geom_hline(yintercept=155/coeff, linetype="dashed", color = "blue")+
+   geom_vline(xintercept = 6.41, linetype="dashed", color = "blue")+
+  geom_polygon(data = RealdeductibleQ2_up,
+               aes(x = prob, y = V1),
+               fill = "green",
+               alpha = 1/9) +
+  geom_polygon(data = RealdeductibleQ2_up2,
+               aes(x = prob, y = V1),
+               fill = "red",
+               alpha = 1/3) +
+  
+  scale_y_continuous(
+    
+    # Features of the first axis
+    name = "percentage of people swiched",
+    
+    # Add a second axis and specify its features
+    sec.axis = sec_axis(~ .*coeff -155 , name="price difference between policies*")
+  ) + 
+  
+
+
+  theme(
+    axis.title.y = element_text(color = temperatureColor, size=13),
+    axis.title.y.right = element_text(color = priceColor, size=13)
+  ) +
+
+  ggtitle("cumulative swiched participants, versus the price difference between policies*")
+```
+
+\*Assuming you spend 100% of the deductible
+
+```{r}
+
+RealdeductibleQ2A <- RealdeductibleQ2 %>%
+  rename(Gains = diff) %>%
+  select(-DiffV1, - prob) %>%  # only keep columns we need
+  # create 2 data points, close to zero for the fill
+  add_row(Gains = 0,
+                  V1 = RealdeductibleQ2[6,2]+(RealdeductibleQ2[7,2] - RealdeductibleQ2[6,2])*0.41) %>% 
+  add_row(Gains = 0.0001,
+                  V1 = RealdeductibleQ2[6,2]+(RealdeductibleQ2[7,2] - RealdeductibleQ2[6,2])*0.41) %>%
+  # create fill variable
+  mutate(Profit = as.factor(ifelse(test = Gains > 0, 
+                         yes = 1,
+                         no = 0)))
+
+
+ggplot(data = RealdeductibleQ2A, aes(x = Gains, y = V1)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = V1, ymax = 1, fill = Profit), alpha = 0.4) +
+  scale_fill_manual(values = c("1" = "steelblue1", "0" = "firebrick1")) +
+   geom_segment(x = 0, xend = 0, y = 0, yend = 1, color = "black", linetype = "dashed", size = 0.8) +
+   geom_point() +
+  labs(x = "Price difference between the 2 options\n plus the deductible", y = "Proportion of participants switched") +
+  theme_bw() +
+  ylim(0,1) +
+  theme(legend.position = "none") +
+  annotate(geom = "text",
+           x = -80, 
+           y = 0.95,
+           label = "participants that\nshould have switched") +
+  annotate(geom = "text",
+           x = 167, 
+           y = 0.75,
+           label = "risk averse\nparticipants") +
+   annotate(geom = "text",
+           x = 167, 
+           y = 0.25,
+           label = "risk seeking\nparticipants") +
+scale_x_reverse(breaks = c(325, 265, 205, 145, 85, 25, 0, -35, -95, -155)) 
+  
+   
+```
+
+```{r}
+ggsave("question2.png")
+```
+
+\newpage
+
+# Question 3
+
+Deductable is 385 or 585 Blue gets the insurance premium as a monthly expense Red gets the insurance premium as a yearly expense To the right of the Black line is e where participants pay more than 200 to have a 200 euro lower deductible
+
+## Swichover density plot
+
+```{r}
+
+
+
+
+Q3V1 <- Q3V1 %>%
+  t()%>%
+  as.data.frame()
+Q3V1_pdf <- Q3V1 %>% 
+  mutate(DiffV1 = Q3V1 - lag(Q3V1))
+Q3V1_pdf <- Q3V1_pdf %>%
+  t()%>%
+  as.data.frame()
+Q3V1_pdf <- Q3V1_pdf %>% replace(is.na(.), Q3V1_pdf[1,1])
+
+
+
+
+Q3V2 <- Q3V2 %>%
+  t()%>%
+  as.data.frame()
+Q3V2_pdf <- Q3V2 %>% 
+  mutate(DiffV2 = Q3V2 - lag(Q3V2))
+Q3V2_pdf <- Q3V2_pdf %>%
+  t()%>%
+  as.data.frame()
+Q3V2_pdf <- Q3V2_pdf %>% replace(is.na(.), Q3V2_pdf[1,1])
+
+
+probabilities <- c(1,2,3,4,5,6,7,8,9)
+Q3_total <- rbind(Q3V2_pdf, Q3V1_pdf, probabilities)
+rownames(Q3_total)[5] <- "prob"
+
+
+Q3_total <- Q3_total %>%
+  t()%>%
+  as.data.frame()
+
+
+```
+
+```{r}
+p = ggplot() + 
+  geom_line(data = Q3_total, aes(x = prob, y = DiffV1), color = "blue") +
+  geom_line(data = Q3_total, aes(x = prob, y = DiffV2), color = "red") +
+  geom_point(data = Q3_total, aes(x = prob, y = DiffV1), color = "blue") +
+  geom_point(data = Q3_total, aes(x = prob, y = DiffV2), color = "red") +
+  geom_vline(xintercept = 3.5)+
+  xlab('Swich over point') +
+  ylab('Percentge of swichers')
+p
+```
+
+## Cumulative swichover plot
+
+```{r}
+p = ggplot() + 
+  geom_line(data = Q3_total, aes(x = prob, y = V11), color = "blue") +
+  geom_line(data = Q3_total, aes(x = prob, y = V1), color = "red") +
+  geom_point(data = Q3_total, aes(x = prob, y = V11), color = "blue") +
+  geom_point(data = Q3_total, aes(x = prob, y = V1), color = "red") +
+  xlab('Swich over point') +
+  geom_vline(xintercept = 3.5)+
+  ylab('Cumalitive swiched people') +
+  ylim(0, 1)
+
+p
+```
+
+```{r}
+RealdeductibleQ3<- c((585-385-12*(110-105)),
+                   (585-385-12*(110-100)),
+                   (585-385-12*(110-95)),
+                   (585-385-12*(110-90)),
+                   (585-385-12*(110-85)),
+                   (585-385-12*(110-80)),
+                   (585-385-12*(110-75)),
+                   (585-385-12*(110-70)),
+                   (585-385-12*(110-65)))
+
+RealdeductibleQ3 <- rbind(RealdeductibleQ3, Q3V1_pdf, probabilities)%>%
+  t()%>%
+  as.data.frame()
+colnames(RealdeductibleQ3)[4] <- "prob" 
+colnames(RealdeductibleQ3)[1] <- "diff" 
+
+
+
+```
+
+```{r}
+min_x <- 1
+max_x <- 9
+
+RealdeductibleQ3_up <- RealdeductibleQ3 %>%
+  select(-c(diff, DiffV1))%>%
+  add_row(prob = c(max_x, min_x),
+                  V1 = c(Inf, Inf))
+
+min_x1 <- 3.333
+max_x1 <- 9
+
+RealdeductibleQ3_up2 <- RealdeductibleQ3 %>%
+  select(-c(diff, DiffV1))%>%
+  filter(!row_number() %in% c(1, 2,3))%>%
+  tibble::add_row(prob = c(max_x1, min_x1, 3.333),
+                  V1 = c(Inf, Inf, RealdeductibleQ3[3,2]+(RealdeductibleQ3[4,2] - RealdeductibleQ3[3,2])*0.333))
+
+
+
+
+
+
+
+
+# Value used to transform the data
+coeff <- 480
+
+# A few constants
+temperatureColor <- "#69b3a2"
+priceColor <- rgb(0.2, 0.6, 0.9, 1)
+
+ggplot(RealdeductibleQ3, aes(x=prob), xlim= c(0,9)) +
+  
+  geom_line( aes(y=V1), size=1, color=temperatureColor) +
+  geom_point(aes(y=V1), size=2, color=temperatureColor)+
+  
+  geom_line( aes(y=(diff+340) / coeff ), size=1, color=priceColor) +
+   geom_hline(yintercept=340/coeff, linetype="dashed", color = "blue")+
+   geom_vline(xintercept = 3.3333, linetype="dashed", color = "blue")+
+  geom_polygon(data = RealdeductibleQ3_up,
+               aes(x = prob, y = V1),
+               fill = "green",
+               alpha = 1/9) +
+  geom_polygon(data = RealdeductibleQ3_up2,
+               aes(x = prob, y = V1),
+               fill = "red",
+               alpha = 1/3) +
+  
+  scale_y_continuous(
+    
+    # Features of the first axis
+    name = "percentage of people swiched",
+    
+    # Add a second axis and specify its features
+    sec.axis = sec_axis(~ .*coeff -340 , name="price difference between policies*")
+  ) + 
+  
+
+
+  theme(
+    axis.title.y = element_text(color = temperatureColor, size=13),
+    axis.title.y.right = element_text(color = priceColor, size=13)
+  ) +
+
+  ggtitle("cumulative swiched participants, versus the price difference between policies*")
+```
+
+
+
+
+
+
+```{r}
+
+
+RealdeductibleQ3A <- RealdeductibleQ3 %>%
+  rename(Gains = diff) %>%
+  select(-DiffV1, - prob) %>%  # only keep columns we need
+  # create 2 data points, close to zero for the fill
+  add_row(Gains = 0,
+                  V1 = RealdeductibleQ3[3,2]+(RealdeductibleQ3[4,2] - RealdeductibleQ3[3,2])*0.333) %>% 
+  add_row(Gains = 0.0001,
+                  V1 = RealdeductibleQ3[3,2]+(RealdeductibleQ3[4,2] - RealdeductibleQ3[3,2])*0.333) %>%
+  # create fill variable
+  mutate(Profit = as.factor(ifelse(test = Gains > 0, 
+                         yes = 1,
+                         no = 0)))
+
+
+ggplot(data = RealdeductibleQ3A, aes(x = Gains, y = V1)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = V1, ymax = 1, fill = Profit), alpha = 0.4) +
+  scale_fill_manual(values = c("1" = "steelblue1", "0" = "firebrick1")) +
+   geom_segment(x = 0, xend = 0, y = 0, yend = 1, color = "black", linetype = "dashed", size = 0.8) +
+   geom_point() +
+  labs(x = "Price difference between the 2 options\n plus the deductible", y = "Proportion of participants switched") +
+  theme_bw() +
+  ylim(0,1) +
+  theme(legend.position = "none") +
+  annotate(geom = "text",
+           x = -80, 
+           y = 0.85,
+           label = "participants that\nshould have switched") +
+  annotate(geom = "text",
+           x = 87, 
+           y = 0.85,
+           label = "risk averse\nparticipants") +
+   annotate(geom = "text",
+           x = 87, 
+           y = 0.10,
+           label = "risk seeking\nparticipants") +
+scale_x_reverse(breaks = c(140, 80, 20, 0, -40, -100, -160, -220, -280, -340)) 
+  
+   
+```
+
+```{r}
+ggsave("question3.png")
+```
+
+
+\newpage
+
+#Question 4 Deductable is 385 or 885 Blue gets the insurance premium as a monthly expense Red gets the insurance premium as a yearly expense To the right of the Black line is where participants pay more than 500 to have a 500 euro lower deductible
+
+Swichover density plot
+
+```{r}
+
+
+
+
+Q4V1 <- Q4V1 %>%
+  t()%>%
+  as.data.frame()
+Q4V1_pdf <- Q4V1 %>% 
+  mutate(DiffV1 = Q4V1 - lag(Q4V1))
+Q4V1_pdf <- Q4V1_pdf %>%
+  t()%>%
+  as.data.frame()
+Q4V1_pdf <- Q4V1_pdf %>% replace(is.na(.), Q4V1_pdf[1,1])
+
+
+
+
+Q4V2 <- Q4V2 %>%
+  t()%>%
+  as.data.frame()
+Q4V2_pdf <- Q4V2 %>% 
+  mutate(DiffV2 = Q4V2 - lag(Q4V2))
+Q4V2_pdf <- Q4V2_pdf %>%
+  t()%>%
+  as.data.frame()
+Q4V2_pdf <- Q4V2_pdf %>% replace(is.na(.), Q4V2_pdf[1,1])
+
+
+probabilities <- c(1,2,3,4,5,6,7,8,9)
+Q4_total <- rbind(Q4V2_pdf, Q4V1_pdf, probabilities)
+rownames(Q4_total)[5] <- "prob"
+
+
+Q4_total <- Q4_total %>%
+  t()%>%
+  as.data.frame()
+
+
+```
+
+```{r}
+p = ggplot() + 
+  geom_line(data = Q4_total, aes(x = prob, y = DiffV1), color = "blue") +
+  geom_line(data = Q4_total, aes(x = prob, y = DiffV2), color = "red") +
+  geom_point(data = Q4_total, aes(x = prob, y = DiffV1), color = "blue") +
+  geom_point(data = Q4_total, aes(x = prob, y = DiffV2), color = "red") +
+  geom_vline(xintercept = 5.5)+
+  xlab('Swich over point') +
+  ylab('Percentge of swichers')
+p
+```
+
+```{r}
+p = ggplot() + 
+  geom_line(data = Q4_total, aes(x = prob, y = V11), color = "blue") +
+  geom_line(data = Q4_total, aes(x = prob, y = V1), color = "red") +
+  geom_point(data = Q4_total, aes(x = prob, y = V11), color = "blue") +
+  geom_point(data = Q4_total, aes(x = prob, y = V1), color = "red") +
+  theme_bw()+
+  xlab('Swich over point') +
+  geom_vline(xintercept = 5.5)+
+  ylab('Cumalitive swiched people') +
+  ylim(0, 1)
+
+p
+```
+
+```{r}
+RealdeductibleQ4<- c((885-385-12*(110-90)),
+                   (885-385-12*(110-85)),
+                   (885-385-12*(110-80)),
+                   (885-385-12*(110-75)),
+                   (885-385-12*(110-70)),
+                   (885-385-12*(110-65)),
+                   (885-385-12*(110-60)),
+                   (885-385-12*(110-55)),
+                   (885-385-12*(110-50)))
+
+RealdeductibleQ4 <- rbind(RealdeductibleQ4, Q4V1_pdf, probabilities)%>%
+  t()%>%
+  as.data.frame()
+colnames(RealdeductibleQ4)[4] <- "prob" 
+colnames(RealdeductibleQ4)[1] <- "diff" 
+
+
+
+```
+
+```{r}
+min_x <- 1
+max_x <- 9
+
+RealdeductibleQ4_up <- RealdeductibleQ4 %>%
+  select(-c(diff, DiffV1))%>%
+  add_row(prob = c(max_x, min_x),
+                  V1 = c(Inf, Inf))
+
+min_x1 <- 5.333
+max_x1 <- 9
+
+RealdeductibleQ4_up2 <- RealdeductibleQ4 %>%
+  select(-c(diff, DiffV1))%>%
+  filter(!row_number() %in% c(1, 2,3, 4, 5))%>%
+  tibble::add_row(prob = c(max_x1, min_x1, 5.333),
+                  V1 = c(Inf, Inf, RealdeductibleQ4[5,2]+(RealdeductibleQ4[6,2] - RealdeductibleQ4[5,2])*0.333))
+
+RealdeductibleQ4[5,2]+(RealdeductibleQ4[6,2] - RealdeductibleQ4[5,2])*0.333
+
+
+
+
+
+
+# Value used to transform the data
+coeff <- 480
+
+# A few constants
+temperatureColor <- "#69b3a2"
+priceColor <- rgb(0.2, 0.6, 0.9, 1)
+
+ggplot(RealdeductibleQ4, aes(x=prob), xlim= c(0,9)) +
+  
+  geom_line( aes(y=V1), size=1, color=temperatureColor) +
+  geom_point(aes(y=V1), size=2, color=temperatureColor)+
+  
+  geom_line( aes(y=(diff+220) / coeff ), size=1, color=priceColor) +
+   geom_hline(yintercept=220/coeff, linetype="dashed", color = "blue")+
+   geom_vline(xintercept = 5.3333, linetype="dashed", color = "blue")+
+  geom_polygon(data = RealdeductibleQ4_up,
+               aes(x = prob, y = V1),
+               fill = "green",
+               alpha = 1/9) +
+  geom_polygon(data = RealdeductibleQ4_up2,
+               aes(x = prob, y = V1),
+               fill = "red",
+               alpha = 1/3) +
+  
+  scale_y_continuous(
+    
+    # Features of the first axis
+    name = "percentage of people swiched",
+    
+    # Add a second axis and specify its features
+    sec.axis = sec_axis(~ .*coeff -220 , name="price difference between policies*")
+  ) + 
+  
+
+
+  theme(
+    axis.title.y = element_text(color = temperatureColor, size=13),
+    axis.title.y.right = element_text(color = priceColor, size=13)
+  ) +
+
+  ggtitle("cumulative swiched participants, versus the price difference between policies*")
+```
+
+```{r}
+
+
+RealdeductibleQ4A <- RealdeductibleQ4%>%
+  rename(Gains = diff) %>%
+  select(-DiffV1, - prob) %>%  # only keep columns we need
+  # create 2 data points, close to zero for the fill
+  add_row(Gains = 0,
+                  V1 = RealdeductibleQ4[5,2]+(RealdeductibleQ4[6,2] - RealdeductibleQ4[5,2])*0.333) %>% 
+  add_row(Gains = 0.0001,
+                  V1 = RealdeductibleQ4[5,2]+(RealdeductibleQ4[6,2] - RealdeductibleQ4[5,2])*0.333) %>%
+  # create fill variable
+  mutate(Profit = as.factor(ifelse(test = Gains > 0, 
+                         yes = 1,
+                         no = 0)))
+
+
+ggplot(data = RealdeductibleQ4A, aes(x = Gains, y = V1)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = V1, ymax = 1, fill = Profit), alpha = 0.4) +
+  scale_fill_manual(values = c("1" = "steelblue1", "0" = "firebrick1")) +
+   geom_segment(x = 0, xend = 0, y = 0, yend = 1, color = "black", linetype = "dashed", size = 0.8) +
+   geom_point() +
+  labs(x = "Price difference between the 2 options\n plus the deductible", y = "Proportion of participants switched") +
+  theme_bw() +
+  ylim(0,1) +
+  theme(legend.position = "none") +
+  annotate(geom = "text",
+           x = -80, 
+           y = 0.85,
+           label = "participants that\nshould have switched") +
+  annotate(geom = "text",
+           x = 87, 
+           y = 0.85,
+           label = "risk averse\nparticipants") +
+   annotate(geom = "text",
+           x = 87, 
+           y = 0.10,
+           label = "risk seeking\nparticipants") +
+scale_x_reverse(breaks = c(260, 200, 140, 80, 20, 0, -40, -100, -160, -220)) 
+  
+   
+```
+```{r}
+ggsave("question4.png")
+```
+
+
+```{r}
+df2 <- read.csv2("SurveyData2.csv", sep = ",") 
+v2V1 <- df2 %>%
+  filter(Version == 0)
+
+v2V2 <- df2 %>%
+  filter(Version == 1)
+
+
+averageV1 <- colMeans(v2V1)
+averageV1 <- as.tibble(averageV1)
+averageV1 <- averageV1[4:6, ]
+
+averageV2 <- colMeans(v2V2)
+averageV2 <- as.tibble(averageV2)
+averageV2 <- averageV2[4:6, ]
+
+averagesop <- rbind(averageV1, averageV2) 
+
+
+rowname <- c("Q2", "Q3", "Q4", "Q2", "Q3", "Q4")
+vers <- as.factor(c(1,1,1,2,2,2))
+rown <- c(2,3,4,2,3,4)
+
+
+
+
+q2rv1 <- RealdeductibleQ2[5,1]+(RealdeductibleQ2[4,1] - RealdeductibleQ2[5,1])*0.5833
+q3rv1 <- RealdeductibleQ3[5,1]+(RealdeductibleQ3[4,1] - RealdeductibleQ3[5,1])*0.7083
+q4rv1 <-   RealdeductibleQ4[6,1]+(RealdeductibleQ4[5,1] - RealdeductibleQ4[6,1])*0.625
+q2rv2 <- RealdeductibleQ2[6,1]+(RealdeductibleQ2[5,1] - RealdeductibleQ2[6,1])*0.3333
+q3rv2 <- RealdeductibleQ3[4,1]+(RealdeductibleQ3[3,1] - RealdeductibleQ3[4,1])*0.375
+q4rv2 <-   RealdeductibleQ4[5,1]+(RealdeductibleQ4[5,1] - RealdeductibleQ4[5,1])*0.375
+
+risk <- c(q2rv1, q3rv1, q4rv1, q2rv2, q3rv2, q4rv2)
+swp <- c(6.5, 3.5, 5.5, 6.5, 3.5, 5.5)
+total <- cbind(rowname, averagesop, vers, rown, risk, swp)
+
+
+```
+
+
+
+
+```{r}
+ggplot(data = total, aes(x = rown, y = risk, color = vers)) +
+  geom_point() +
+  geom_line()+
+  theme_bw() +
+  labs( color = "Version", y = "Real Risk", x = "Question") 
+```
+```{r}
+
+
+
+ggplot(data = total, aes(x = swp, y = value, color = vers)) +
+  geom_point() +
+  geom_line()+
+  theme_bw() +
+  labs(color = "Version", y = "average switch over point", x = "Zero-point") 
+```
+```{r}
+ggsave("questiocheck.png")
+```
+
+
+
+```{r}
+risk_tolerance <- df2 %>%
+  select(SOP.Q2.B.A, Version, RiskAverse)
+  
+ggplot(data = risk_tolerance, aes(x = RiskAverse, y = SOP.Q2.B.A, color = as.factor(Version), fill = as.factor(Version))) +
+  geom_point() +
+  theme_bw() +
+  geom_smooth(method = "lm", alpha = 0.2) +
+  labs(color = "Version", fill = "Version", y = "average switch over point", x = "Zero-point") 
+```
+```{r}
+
+risk_tolerance2 <- df2 %>%
+  select(SOP.Q3.A.B, Version, RiskAverse)
+  
+ggplot(data = risk_tolerance2, aes(x = RiskAverse, y = SOP.Q3.A.B, color = as.factor(Version), fill = as.factor(Version))) +
+  geom_point() +
+  theme_bw() +
+  geom_smooth(method = "lm", alpha = 0.2) +
+  labs(color = "Version", fill = "Version", y = "average switch over point", x = "Zero-point") 
+```
+```{r}
+
+risk_tolerance3 <- df2 %>%
+  select(SOP.Q4.A.B, Version, RiskAverse)
+  
+ggplot(data = risk_tolerance3, aes(x = RiskAverse, y = SOP.Q4.A.B, color = as.factor(Version), fill = as.factor(Version))) +
+  geom_point() +
+  theme_bw() +
+  geom_smooth(method = "lm", alpha = 0.2) +
+  labs(color = "Version", fill = "Version", y = "average switch over point", x = "Zero-point") 
+
+```
+
+
+
+
+
+```{r, echo = FALSE}
+risk_over_time <- as.tibble(v2V1$Subject)
+risk_over_time$Q2 <- plyr::mapvalues(v2V1$SOP.Q1.A.B, c(1,2,3,4,5,6,7,8,9,10) , c(RealdeductibleQ2$diff, -155) , warn_missing = TRUE)
+risk_over_time$Q3 <- plyr::mapvalues(v2V1$SOP.Q3.A.B, c(1,2,3,4,5,6,7,8,9,10) , c(RealdeductibleQ3$diff, -340) , warn_missing = TRUE)
+risk_over_time$Q4 <- plyr::mapvalues(v2V1$SOP.Q4.A.B, c(1,2,3,4,5,6,7,8,9,10) , c(RealdeductibleQ4$diff, -220) , warn_missing = TRUE)
+
+
+```
+
+
+```{r}
+averageriskv1<- as.tibble(t(colMeans(risk_over_time)))
+averageriskv1 <- averageriskv1[,-1]
+Q <- c("Q2", "Q3", "Q4")
+averageriskv1 <-rbind(averageriskv1, Q)
+averageriskv1<- as.data.frame(averageriskv1)
+rownames(averageriskv1) <- c("risk", "question")
+averageriskv1
+```
+
+```{r}
+df <- data.frame(risk <- c(-5, -72.5, 0),
+                 SOP <- c(7.41, 3.33, 5.33),
+                 question <- c(2,3,4))
+ggplot(data=df, aes(x=question, y=risk)) +
+  geom_line()+
+  geom_point()
+```
+```{r}
+coeff <- -10
+
+# A few constants
+temperatureColor <- "#69b3a2"
+priceColor <- rgb(0.2, 0.6, 0.9, 1)
+
+ggplot(df, aes(x=question)) +
+  
+  geom_line( aes(y=SOP), size=2, color=temperatureColor) + 
+  geom_line( aes(y=risk / coeff), size=2, color=priceColor) +
+  
+  scale_y_continuous(
+    
+    # Features of the first axis
+    name = "Zero point",
+    
+    # Add a second axis and specify its features
+    sec.axis = sec_axis(~.*coeff, name="Average Risk (€)")
+  ) + 
+  
+  theme_ipsum() +
+
+  theme(
+    axis.title.y = element_text(color = temperatureColor, size=13),
+    axis.title.y.right = element_text(color = priceColor, size=13)
+  ) +
+labs(x = "Question") +
+  theme_bw() +
+  ggtitle("Average Risk versus the Zero Point")
+```
+
+
